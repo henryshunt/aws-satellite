@@ -1,22 +1,22 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
-int satelliteIdPin1 = 2;
-int satelliteIdPin2 = 3;
+int satelliteIdPin1 = 4;
+int satelliteIdPin2 = 5;
 
 bool windSpeedEnabled = false;
 int windSpeedPin = 0;
+bool windDirectionEnabled = false;
+int windDirectionPin = 0;
 
 int windSpeedSamplingBucket = 1;
 int windSpeedSamplingBucket1 = 0;
 int windSpeedSamplingBucket2 = 0;
 
-bool windDirectionEnabled = false;
-int windDirectionPin = 0;
 
 void setup()
 {
-    Serial.begin(115200);
+    Serial.begin(9600);
     pinMode(satelliteIdPin1, INPUT_PULLUP);
     pinMode(satelliteIdPin2, INPUT_PULLUP);
 
@@ -111,12 +111,12 @@ void setup()
 
             if (windSpeedEnabled)
             {
-                pinMode(windSpeedPin, INPUT);
-                attachInterrupt(digitalPinToInterrupt(windSpeedPin), windSpeedInterrupt, RISING);
+                pinMode(windSpeedPin, INPUT_PULLUP);
+                attachInterrupt(digitalPinToInterrupt(windSpeedPin), windSpeedInterrupt, FALLING);
             }
         }
 
-        // Move to the main loop function
+        // Exit setup and move to the main loop function
         if (strncmp(command, "START", 5) == 0)
         {
             Serial.println("START");
@@ -145,7 +145,8 @@ void loop()
             }
         }
 
-        if (strncmp(command, "CLOCK", 5) == 0)
+        // Read sensor values and respond with a JSON string
+        if (strncmp(command, "SAMPLE", 6) == 0)
         {
             if (windSpeedSamplingBucket == 1)
                 windSpeedSamplingBucket = 2;
@@ -164,7 +165,7 @@ void loop()
                 if (windDirection == 360) windDirection = 0;
             }
 
-            const char* format = "{\"windSpeed\":%d,\"windDirection\":%d}";
+            const char* format = "SAMPLE {\"windSpeed\":%d,\"windDirection\":%d}";
             char samples[100] = { '\0' };
 
             int windSpeed = 0;
@@ -181,10 +182,6 @@ void loop()
 
             sprintf(samples, format, windSpeed, windDirection);
             Serial.println(samples);
-        }
-        else if (strncmp(command, "clear", 5) == 0)
-        {
-            
         }
     }
 }
