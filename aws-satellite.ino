@@ -4,25 +4,25 @@
 #define ID_PIN 4
 
 bool configured = false;
-bool started = false;
+bool firstSample = true;
 
 bool windSpeedEnabled = false;
 int windSpeedPin;
 bool windDirectionEnabled = false;
 int windDirectionPin;
 
-int windSpeedCount = 0;
+volatile int windSpeedCount = 0;
 
 
 void setup()
 {
     pinMode(ID_PIN, INPUT_PULLUP);
-    Serial.begin(9600);
+    Serial.begin(115200);
 }
 
 void loop()
 {
-    char command[100] = { '\0' };
+    char command[120] = { '\0' };
     int commandPosition = 0;
     bool commandEnded = false;
 
@@ -45,12 +45,8 @@ void loop()
         command_id();
     else if (strncmp(command, "CONFIG", 6) == 0)
         command_config(command);
-    else if (strncmp(command, "START", 5) == 0)
-        command_start();
     else if (strncmp(command, "SAMPLE", 6) == 0)
         command_sample();
-    else if (strncmp(command, "STOP", 4) == 0)
-        command_stop(true);
     else Serial.write("ERROR\n");
 }
 
@@ -64,28 +60,30 @@ void command_id()
 {
     char response[3] = { '\0' };
 
-    // ID is set in hardware by toggling a digital pin (which provides two unique IDs)
-    sprintf(response, "%d\n", !digitalRead(ID_PIN) + 1);
+    snprintf(response, 3, "%d\n", !digitalRead(ID_PIN) + 1);
     Serial.write(response);
 }
 
 void command_config(char* command)
 {
-    command_stop(false);
-    configured = false;
-
-    if (strlen(command) < 8)
+    if (configured)
     {
-        Serial.write("ERROR\n");
-        return;
+        if (windSpeedEnabled)
+            detachInterrupt(digitalPinToInterrupt(windSpeedPin));
+        
+        configured = false;
+        firstSample = true;
     }
 
-    if (configure(command + 7))
+    if (strlen(command) >= 8 && configure(command + 7))
     {
         configured = true;
 
         if (windSpeedEnabled)
+        {
             pinMode(windSpeedPin, INPUT_PULLUP);
+            attachInterrupt(digitalPinToInterrupt(windSpeedPin), wind_speed_interrupt, FALLING);
+        }
 
         Serial.write("OK\n");
     }
@@ -117,10 +115,13 @@ bool configure(char* json)
                     if (value.is<int>())
                         windSpeedPin = value;
                     else return false;
-                } else return false;
+                }
+                else return false;
             }
-        } else return false;
-    } else return false;
+        }
+        else return false;
+    }
+    else return false;
 
     if (jsonObject.containsKey("windDirectionEnabled"))
     {
@@ -137,29 +138,20 @@ bool configure(char* json)
                     if (value.is<int>())
                         windDirectionPin = value;
                     else return false;
-                } else return false;
+                }
+                else return false;
             }
-        } else return false;
-    } else return false;
+        }
+        else return false;
+    }
+    else return false;
 
     return true;
 }
 
-void command_start()
-{
-    if (configured)
-    {
-        attachInterrupt(digitalPinToInterrupt(windSpeedPin), wind_speed_interrupt, FALLING);
-        started = true;
-
-        Serial.write("OK\n");
-    }
-    else Serial.write("ERROR\n");
-}
-
 void command_sample()
 {
-    if (!started)
+    if (!configured)
     {
         Serial.write("ERROR\n");
         return;
@@ -173,29 +165,34 @@ void command_sample()
     }
 
     int windDirection;
-
-    // Read wind direction
     if (windDirectionEnabled)
     {
-        float adcValue = analogRead(windDirectionPin);
+        float adcVoltage = analogRead(windDirectionPin) * (5.0 / 1023.0);
         
-        if (adcValue < 0.25)
-            adcValue = 0.25;
-        else if (adcValue > 4.75)
-            adcValue = 4.75;
+        if (adcVoltage < 0.25)
+            adcVoltage = 0.25;
+        else if (adcVoltage > 4.75)
+            adcVoltage = 4.75;
         
-        windDirection = round(map(adcValue, 0.25, 4.75, 0, 360));
+        windDirection = round((adcVoltage - 0.25) / (4.75 - 0.25) * 360);
 
         if (windDirection == 360)
             windDirection = 0;
     }
 
-
     char sampleOut[50] = { '\0' };
+    sample_json(sampleOut, windSpeed, windDirection);
+    
+    firstSample = false;
+    Serial.write(sampleOut);
+}
+
+void sample_json(char* sampleOut, int windSpeed, int windDirection)
+{
     strcat(sampleOut, "{");
     int length = 1;
 
-    if (windSpeedEnabled)
+    if (windSpeedEnabled && !firstSample)
         length += sprintf(sampleOut + length, "\"windSpeed\":%d", windSpeed);
     else length += sprintf(sampleOut + length, "\"windSpeed\":null");
 
@@ -204,22 +201,6 @@ void command_sample()
     else length += sprintf(sampleOut + length, ",\"windDirection\":null");
 
     strcat(sampleOut + length, "}\n");
-    
-    Serial.write(sampleOut);
-}
-
-void command_stop(bool respond)
-{
-    if (started)
-    {
-        if (windSpeedEnabled)
-            detachInterrupt(digitalPinToInterrupt(windSpeedPin));
-        
-        started = false;
-    }
-
-    if (respond)
-        Serial.write("OK\n");
 }
 
 
