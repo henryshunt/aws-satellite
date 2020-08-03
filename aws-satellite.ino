@@ -11,15 +11,21 @@ int windSpeedPin;
 bool windDirectionEnabled = false;
 int windDirectionPin;
 
-volatile int windSpeedCount = 0;
+volatile int windSpeedCount;
 
 
+/**
+ * Runs once on device start to perform initial setup.
+ */
 void setup()
 {
     pinMode(ID_PIN, INPUT_PULLUP);
     Serial.begin(115200);
 }
 
+/**
+ * Loops continuously, checking for and responding to received serial commands.
+ */
 void loop()
 {
     char command[120] = { '\0' };
@@ -50,37 +56,59 @@ void loop()
     else Serial.write("ERROR\n");
 }
 
-
+/**
+ * Responds to the PING serial command. Outputs a textual description of the
+ * device for the purposes of differentiating it from other serial devices.
+ */
 void command_ping()
 {
     Serial.write("AWS Satellite Device\n");
 }
 
+/**
+ * Responds to the ID serial command. Outputs the ID of the device for the
+ * purposes of allowing multiple satellite devices in use at once. ID is set in
+ * hardware by toggling a digital pin.
+ */
 void command_id()
 {
     char response[3] = { '\0' };
 
-    snprintf(response, 3, "%d\n", !digitalRead(ID_PIN) + 1);
+    sprintf(response, "%d\n", !digitalRead(ID_PIN) + 1);
     Serial.write(response);
 }
 
+/**
+ * Responds to the CONFIG serial command. Sets which sensors are enabled and
+ * configures those sensors. Outputs OK or ERROR.
+ * @param command The received CONFIG command. Format is "CONFIG {JSON}".
+ */
 void command_config(char* command)
 {
-    if (configured)
+    if (strnlen(command, 8) < 8)
     {
-        if (windSpeedEnabled)
-            detachInterrupt(digitalPinToInterrupt(windSpeedPin));
-        
-        configured = false;
-        firstSample = true;
+        Serial.write("ERROR\n");
+        return;
     }
 
-    if (strlen(command) >= 8 && configure(command + 7))
+    bool oldWindSpeedEnabled = windSpeedEnabled;
+    int oldWindSpeedPin = windSpeedPin;
+
+    if (extract_config(command + 7))
     {
+        // Clear up previous configuration
+        if (configured)
+        {
+            if (oldWindSpeedEnabled)
+                detachInterrupt(digitalPinToInterrupt(oldWindSpeedPin));
+        }
+
         configured = true;
+        firstSample = true;
 
         if (windSpeedEnabled)
         {
+            windSpeedCount = 0;
             pinMode(windSpeedPin, INPUT_PULLUP);
             attachInterrupt(digitalPinToInterrupt(windSpeedPin), wind_speed_interrupt, FALLING);
         }
@@ -90,30 +118,42 @@ void command_config(char* command)
     else Serial.write("ERROR\n");
 }
 
-bool configure(char* json)
+/**
+ * Extracts the configuration values from a JSON string and stores them.
+ * @param json JSON string containing configuration values.
+ * @return An indication of success or failure.
+ */
+bool extract_config(char* json)
 {
-    StaticJsonDocument<JSON_OBJECT_SIZE(4)> document;
-    DeserializationError jsonStatus = deserializeJson(document, json);
+    StaticJsonDocument<JSON_OBJECT_SIZE(4)> jsonDocument;
+    DeserializationError jsonStatus = deserializeJson(jsonDocument, json);
 
     if (jsonStatus != DeserializationError::Ok)
         return false;
 
-    JsonObject jsonObject = document.as<JsonObject>();
+    bool newWindSpeedEnabled = false;
+    int newWindSpeedPin;
+    bool newWindDirectionEnabled = false;
+    int newWindDirectionPin;
+
+    JsonObject jsonObject = jsonDocument.as<JsonObject>();
+
 
     if (jsonObject.containsKey("windSpeedEnabled"))
     {
         JsonVariant value = jsonObject.getMember("windSpeedEnabled");
+
         if (value.is<bool>())
         {
-            windSpeedEnabled = value;
-            if (windSpeedEnabled)
+            newWindSpeedEnabled = value;
+            if (newWindSpeedEnabled)
             {
                 if (jsonObject.containsKey("windSpeedPin"))
                 {
                     value = jsonObject.getMember("windSpeedPin");
 
-                    if (value.is<int>())
-                        windSpeedPin = value;
+                    if (value.is<int>() && value >= 0)
+                        newWindSpeedPin = value;
                     else return false;
                 }
                 else return false;
@@ -126,17 +166,18 @@ bool configure(char* json)
     if (jsonObject.containsKey("windDirectionEnabled"))
     {
         JsonVariant value = jsonObject.getMember("windDirectionEnabled");
+
         if (value.is<bool>())
         {
-            windDirectionEnabled = value;
-            if (windDirectionEnabled)
+            newWindDirectionEnabled = value;
+            if (newWindDirectionEnabled)
             {
                 if (jsonObject.containsKey("windDirectionPin"))
                 {
                     value = jsonObject.getMember("windDirectionPin");
 
-                    if (value.is<int>())
-                        windDirectionPin = value;
+                    if (value.is<int>() && value >= 0)
+                        newWindDirectionPin = value;
                     else return false;
                 }
                 else return false;
@@ -146,9 +187,19 @@ bool configure(char* json)
     }
     else return false;
 
+
+    windSpeedEnabled = newWindSpeedEnabled;
+    windSpeedPin = newWindSpeedPin;
+    windDirectionEnabled = newWindDirectionEnabled;
+    windDirectionPin = newWindDirectionPin;
+
     return true;
 }
 
+/**
+ * Responds to the SAMPLE serial command. Samples the enabled sensors. Outputs a
+ * JSON string containing the values, or ERROR.
+ */
 void command_sample()
 {
     if (!configured)
@@ -174,36 +225,57 @@ void command_sample()
         else if (adcVoltage > 4.75)
             adcVoltage = 4.75;
         
+        // Convert voltage to degrees
         windDirection = round((adcVoltage - 0.25) / (4.75 - 0.25) * 360);
 
         if (windDirection == 360)
             windDirection = 0;
     }
 
-    char sampleOut[50] = { '\0' };
-    sample_json(sampleOut, windSpeed, windDirection);
+    char sampleJson[50] = { '\0' };
+    sample_json(sampleJson, windSpeed, windDirection);
     
     firstSample = false;
-    Serial.write(sampleOut);
+    Serial.write(sampleJson);
 }
 
-void sample_json(char* sampleOut, int windSpeed, int windDirection)
+/**
+ * Generates the JSON for a sample, containing the values for all sensors.
+ * @param jsonOut JSON string destination.
+ * @param windSpeed The wind speed value.
+ * @param windDirection The wind direction value.
+ */
+void sample_json(char* jsonOut, int windSpeed, int windDirection)
 {
-    strcat(sampleOut, "{");
+    strcat(jsonOut, "{");
     int length = 1;
 
+    // Ignore the first sample for wind speed since the counter value is not
+    // considered valid between the CONFIG and first SAMPLE commands
     if (windSpeedEnabled && !firstSample)
-        length += sprintf(sampleOut + length, "\"windSpeed\":%d", windSpeed);
-    else length += sprintf(sampleOut + length, "\"windSpeed\":null");
+        length += sprintf(jsonOut + length, "\"windSpeed\":%d", windSpeed);
+    else
+    {
+        strcat(jsonOut + length, "\"windSpeed\":null");
+        length += 16;
+    }
 
     if (windDirectionEnabled)
-        length += sprintf(sampleOut + length, ",\"windDirection\":%d", windDirection);
-    else length += sprintf(sampleOut + length, ",\"windDirection\":null");
+        length += sprintf(jsonOut + length, ",\"windDirection\":%d", windDirection);
+    else
+    {
+        strcat(jsonOut + length, ",\"windDirection\":null");
+        length += 21;
+    }
 
-    strcat(sampleOut + length, "}\n");
+    strcat(jsonOut + length, "}\n");
 }
 
 
+/**
+ * Increments the wind speed counter whenever the wind speed sensor generates an
+ * interrupt.
+ */
 void wind_speed_interrupt()
 {
     windSpeedCount++;
