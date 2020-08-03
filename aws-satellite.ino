@@ -31,6 +31,7 @@ void loop()
     char command[120] = { '\0' };
     int commandPosition = 0;
     bool commandEnded = false;
+    bool commandOverflow = false;
 
     // Buffer received characters until we receive a new line character
     while (!commandEnded)
@@ -40,9 +41,25 @@ void loop()
             char newChar = Serial.read();
 
             if (newChar != '\n')
+            {
+                // If there's no space left in the buffer and this character is
+                // not a new line character then don't buffer it
+                if (commandPosition == 120)
+                {
+                    commandOverflow = true;
+                    continue;
+                }
+
                 command[commandPosition++] = newChar;
+            }
             else commandEnded = true;
         }
+    }
+
+    if (commandOverflow)
+    {
+        Serial.write("ERROR\n");
+        return;
     }
 
     if (strncmp(command, "PING", 4) == 0)
