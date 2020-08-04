@@ -123,17 +123,7 @@ void command_config(char* command)
         }
 
         configured = true;
-<<<<<<< HEAD
         started = false;
-=======
-        firstSample = true;
-
-        if (windSpeedEnabled)
-        {
-            windSpeedCount = 0;
-            attachInterrupt(digitalPinToInterrupt(windSpeedPin), wind_speed_interrupt, RISING);
-        }
->>>>>>> f3c310559fc3b0e12a01ab742034f10f845dd7a0
 
         Serial.write("OK\n");
     }
