@@ -126,8 +126,7 @@ void command_config(char* command)
         if (windSpeedEnabled)
         {
             windSpeedCount = 0;
-            pinMode(windSpeedPin, INPUT_PULLUP);
-            attachInterrupt(digitalPinToInterrupt(windSpeedPin), wind_speed_interrupt, FALLING);
+            attachInterrupt(digitalPinToInterrupt(windSpeedPin), wind_speed_interrupt, RISING);
         }
 
         Serial.write("OK\n");
