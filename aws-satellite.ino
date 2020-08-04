@@ -4,14 +4,14 @@
 #define ID_PIN 4
 
 bool configured = false;
-bool firstSample = true;
+bool started = false;
 
 bool windSpeedEnabled = false;
 int windSpeedPin;
 bool windDirectionEnabled = false;
 int windDirectionPin;
 
-volatile int windSpeedCount;
+volatile int windSpeedCounter;
 
 
 /**
@@ -68,6 +68,8 @@ void loop()
         command_id();
     else if (strncmp(command, "CONFIG", 6) == 0)
         command_config(command);
+    else if (strncmp(command, "START", 5) == 0)
+        command_start();
     else if (strncmp(command, "SAMPLE", 6) == 0)
         command_sample();
     else Serial.write("ERROR\n");
@@ -121,6 +123,9 @@ void command_config(char* command)
         }
 
         configured = true;
+<<<<<<< HEAD
+        started = false;
+=======
         firstSample = true;
 
         if (windSpeedEnabled)
@@ -128,6 +133,7 @@ void command_config(char* command)
             windSpeedCount = 0;
             attachInterrupt(digitalPinToInterrupt(windSpeedPin), wind_speed_interrupt, RISING);
         }
+>>>>>>> f3c310559fc3b0e12a01ab742034f10f845dd7a0
 
         Serial.write("OK\n");
     }
@@ -213,12 +219,36 @@ bool extract_config(char* json)
 }
 
 /**
+ * Responds to the START serial command. Adds ISRs and resets counters for
+ * interrupt-based sensors. Outputs OK or ERROR.
+ */
+void command_start()
+{
+    if (!configured)
+    {
+        Serial.write("ERROR\n");
+        return;
+    }
+
+    if (!started)
+    {
+        if (windSpeedEnabled)
+            attachInterrupt(digitalPinToInterrupt(windSpeedPin), wind_speed_interrupt, RISING);
+
+        started = true;
+    }
+    
+    windSpeedCounter = 0;
+    Serial.write("OK\n");
+}
+
+/**
  * Responds to the SAMPLE serial command. Samples the enabled sensors. Outputs a
  * JSON string containing the values, or ERROR.
  */
 void command_sample()
 {
-    if (!configured)
+    if (!started)
     {
         Serial.write("ERROR\n");
         return;
@@ -227,8 +257,8 @@ void command_sample()
     int windSpeed;
     if (windSpeedEnabled)
     {
-        windSpeed = windSpeedCount;
-        windSpeedCount = 0;
+        windSpeed = windSpeedCounter;
+        windSpeedCounter = 0;
     }
 
     int windDirection;
@@ -250,8 +280,6 @@ void command_sample()
 
     char sampleJson[50] = { '\0' };
     sample_json(sampleJson, windSpeed, windDirection);
-    
-    firstSample = false;
     Serial.write(sampleJson);
 }
 
@@ -268,7 +296,7 @@ void sample_json(char* jsonOut, int windSpeed, int windDirection)
 
     // Ignore the first sample for wind speed since the counter value is not
     // considered valid between the CONFIG and first SAMPLE commands
-    if (windSpeedEnabled && !firstSample)
+    if (windSpeedEnabled)
         length += sprintf(jsonOut + length, "\"windSpeed\":%d", windSpeed);
     else
     {
@@ -294,5 +322,5 @@ void sample_json(char* jsonOut, int windSpeed, int windDirection)
  */
 void wind_speed_interrupt()
 {
-    windSpeedCount++;
+    windSpeedCounter++;
 }
