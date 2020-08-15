@@ -6,12 +6,12 @@
 bool configured = false;
 bool started = false;
 
-bool windSpeedEnabled = false;
+bool windSpeedEnabled;
 int windSpeedPin;
-bool windDirectionEnabled = false;
+bool windDirectionEnabled;
 int windDirectionPin;
 
-volatile uint windSpeedCounter;
+volatile unsigned int windSpeedCounter;
 
 
 void setup()
@@ -209,21 +209,18 @@ bool extract_config(char* json)
  */
 void command_start()
 {
-    if (!configured)
+    if (!configured || started)
     {
         Serial.write("ERROR\n");
         return;
     }
 
-    if (!started)
-    {
-        if (windSpeedEnabled)
-            attachInterrupt(digitalPinToInterrupt(windSpeedPin), wind_speed_interrupt, RISING);
+    if (windSpeedEnabled)
+        attachInterrupt(digitalPinToInterrupt(windSpeedPin), anemometer_interrupt, RISING);
 
-        started = true;
-    }
-    
+    started = true;
     windSpeedCounter = 0;
+    
     Serial.write("OK\n");
 }
 
@@ -246,18 +243,19 @@ void command_sample()
         windSpeedCounter = 0;
     }
 
-    int windDirection;
+    double windDirection;
     if (windDirectionEnabled)
     {
-        float adcVoltage = analogRead(windDirectionPin) * (5.0 / 1023.0);
-        
+        double adcVoltage = analogRead(windDirectionPin) * (5.0 / 1023.0);
+
         if (adcVoltage < 0.25)
             adcVoltage = 0.25;
         else if (adcVoltage > 4.75)
             adcVoltage = 4.75;
         
-        // Convert voltage to degrees
-        windDirection = round((adcVoltage - 0.25) / (4.75 - 0.25) * 360);
+        // Convert voltage to degrees. For Inspeed E-Vane II, 5% of input is 0
+        // degrees and 75% is 360
+        windDirection = (adcVoltage - 0.25) / (4.75 - 0.25) * 360;
 
         if (windDirection == 360)
             windDirection = 0;
@@ -274,7 +272,7 @@ void command_sample()
  * @param windSpeed The wind speed value.
  * @param windDirection The wind direction value.
  */
-void sample_json(char* jsonOut, int windSpeed, int windDirection)
+void sample_json(char* jsonOut, int windSpeed, double windDirection)
 {
     strcat(jsonOut, "{");
     int length = 1;
@@ -290,7 +288,13 @@ void sample_json(char* jsonOut, int windSpeed, int windDirection)
     }
 
     if (windDirectionEnabled)
-        length += sprintf(jsonOut + length, ",\"windDirection\":%d", windDirection);
+    {
+        // No default support for formatting floats with sprintf, so do it manually
+        char windDirectionOut[10];
+        dtostrf(windDirection, 8, 5, windDirectionOut);
+
+        length += sprintf(jsonOut + length, ",\"windDirection\":%s", windDirectionOut);
+    }
     else
     {
         strcat(jsonOut + length, ",\"windDirection\":null");
@@ -302,10 +306,9 @@ void sample_json(char* jsonOut, int windSpeed, int windDirection)
 
 
 /**
- * Called when the wind sensor generates an interrupt. Increments the wind
- * speed counter.
+ * ISR for the anemometer. Increments the wind speed counter.
  */
-void wind_speed_interrupt()
+void anemometer_interrupt()
 {
     windSpeedCounter++;
 }
