@@ -11,21 +11,15 @@ int windSpeedPin;
 bool windDirectionEnabled = false;
 int windDirectionPin;
 
-volatile int windSpeedCounter;
+volatile uint windSpeedCounter;
 
 
-/**
- * Runs once on device start to perform initial setup.
- */
 void setup()
 {
     pinMode(ID_PIN, INPUT_PULLUP);
     Serial.begin(115200);
 }
 
-/**
- * Loops continuously, checking for and responding to received serial commands.
- */
 void loop()
 {
     char command[120] = { '\0' };
@@ -74,6 +68,7 @@ void loop()
         command_sample();
     else Serial.write("ERROR\n");
 }
+
 
 /**
  * Responds to the PING serial command. Outputs a textual description of the
@@ -233,8 +228,8 @@ void command_start()
 }
 
 /**
- * Responds to the SAMPLE serial command. Samples the enabled sensors. Outputs a
- * JSON string containing the values, or ERROR.
+ * Responds to the SAMPLE serial command. Samples the enabled sensors. Outputs
+ * a JSON string containing the values, or ERROR.
  */
 void command_sample()
 {
@@ -307,8 +302,8 @@ void sample_json(char* jsonOut, int windSpeed, int windDirection)
 
 
 /**
- * Increments the wind speed counter whenever the wind speed sensor generates an
- * interrupt.
+ * Called when the wind sensor generates an interrupt. Increments the wind
+ * speed counter.
  */
 void wind_speed_interrupt()
 {
