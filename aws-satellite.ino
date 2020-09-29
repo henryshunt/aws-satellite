@@ -291,7 +291,7 @@ void sample_json(char* jsonOut, int windSpeed, double windDirection)
     {
         // No default support for formatting floats with sprintf, so do it manually
         char windDirectionOut[10];
-        dtostrf(windDirection, 8, 5, windDirectionOut);
+        dtostrf(windDirection, 4, 2, windDirectionOut);
 
         length += sprintf(jsonOut + length, ",\"windDirection\":%s", windDirectionOut);
     }
