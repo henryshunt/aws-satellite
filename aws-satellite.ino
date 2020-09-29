@@ -17,7 +17,7 @@ volatile unsigned int windSpeedCounter;
 void setup()
 {
     pinMode(ID_PIN, INPUT_PULLUP);
-    Serial.begin(115200);
+    Serial1.begin(115200);
 }
 
 void loop()
@@ -30,9 +30,9 @@ void loop()
     // Buffer received characters until we receive a new line character
     while (!commandEnded)
     {
-        if (Serial.available())
+        if (Serial1.available())
         {
-            char newChar = Serial.read();
+            char newChar = Serial1.read();
 
             if (newChar != '\n')
             {
@@ -52,7 +52,7 @@ void loop()
 
     if (commandOverflow)
     {
-        Serial.write("ERROR\n");
+        Serial1.write("ERROR\n");
         return;
     }
 
@@ -66,7 +66,7 @@ void loop()
         command_start();
     else if (strncmp(command, "SAMPLE", 6) == 0)
         command_sample();
-    else Serial.write("ERROR\n");
+    else Serial1.write("ERROR\n");
 }
 
 
@@ -76,7 +76,7 @@ void loop()
  */
 void command_ping()
 {
-    Serial.write("AWS Satellite Device\n");
+    Serial1.write("AWS Satellite Device\n");
 }
 
 /**
@@ -89,7 +89,7 @@ void command_id()
     char response[3] = { '\0' };
 
     sprintf(response, "%d\n", !digitalRead(ID_PIN) + 1);
-    Serial.write(response);
+    Serial1.write(response);
 }
 
 /**
@@ -101,7 +101,7 @@ void command_config(char* command)
 {
     if (strnlen(command, 8) < 8)
     {
-        Serial.write("ERROR\n");
+        Serial1.write("ERROR\n");
         return;
     }
 
@@ -120,9 +120,9 @@ void command_config(char* command)
         configured = true;
         started = false;
 
-        Serial.write("OK\n");
+        Serial1.write("OK\n");
     }
-    else Serial.write("ERROR\n");
+    else Serial1.write("ERROR\n");
 }
 
 /**
@@ -211,7 +211,7 @@ void command_start()
 {
     if (!configured || started)
     {
-        Serial.write("ERROR\n");
+        Serial1.write("ERROR\n");
         return;
     }
 
@@ -221,7 +221,7 @@ void command_start()
     started = true;
     windSpeedCounter = 0;
     
-    Serial.write("OK\n");
+    Serial1.write("OK\n");
 }
 
 /**
@@ -232,7 +232,7 @@ void command_sample()
 {
     if (!started)
     {
-        Serial.write("ERROR\n");
+        Serial1.write("ERROR\n");
         return;
     }
 
@@ -263,7 +263,7 @@ void command_sample()
 
     char sampleJson[50] = { '\0' };
     sample_json(sampleJson, windSpeed, windDirection);
-    Serial.write(sampleJson);
+    Serial1.write(sampleJson);
 }
 
 /**
