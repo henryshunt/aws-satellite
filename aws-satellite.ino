@@ -239,7 +239,10 @@ void command_sample()
     int windSpeed;
     if (windSpeedEnabled)
     {
+        // Don't calculate the final wind speed. It is up to the user to do that
+        // as it is dependent on how often they decide to sample
         windSpeed = windSpeedCounter;
+
         windSpeedCounter = 0;
     }
 
