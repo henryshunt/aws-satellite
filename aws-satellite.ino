@@ -1,10 +1,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
-#define ID_PIN 4
-
 bool configured = false;
-bool started = false;
 
 bool windSpeedEnabled;
 int windSpeedPin;
@@ -13,10 +10,8 @@ int windDirectionPin;
 
 volatile unsigned int windSpeedCounter;
 
-
 void setup()
 {
-    pinMode(ID_PIN, INPUT_PULLUP);
     Serial1.begin(115200);
 }
 
@@ -27,7 +22,6 @@ void loop()
     bool commandEnded = false;
     bool commandOverflow = false;
 
-    // Buffer received characters until we receive a new line character
     while (!commandEnded)
     {
         if (Serial1.available())
@@ -36,8 +30,6 @@ void loop()
 
             if (newChar != '\n')
             {
-                // If there's no space left in the buffer and this character is
-                // not a new line character then don't buffer it
                 if (commandPosition == 120)
                 {
                     commandOverflow = true;
@@ -56,40 +48,11 @@ void loop()
         return;
     }
 
-    if (strncmp(command, "PING", 4) == 0)
-        command_ping();
-    else if (strncmp(command, "ID", 2) == 0)
-        command_id();
-    else if (strncmp(command, "CONFIG", 6) == 0)
+    if (strncmp(command, "CONFIG", 6) == 0)
         command_config(command);
-    else if (strncmp(command, "START", 5) == 0)
-        command_start();
     else if (strncmp(command, "SAMPLE", 6) == 0)
         command_sample();
     else Serial1.write("ERROR\n");
-}
-
-
-/**
- * Responds to the PING serial command. Outputs a textual description of the
- * device for the purposes of differentiating it from other serial devices.
- */
-void command_ping()
-{
-    Serial1.write("AWS Satellite Device\n");
-}
-
-/**
- * Responds to the ID serial command. Outputs the ID of the device for the
- * purposes of allowing multiple satellite devices in use at once. ID is set in
- * hardware by toggling a digital pin.
- */
-void command_id()
-{
-    char response[3] = { '\0' };
-
-    sprintf(response, "%d\n", !digitalRead(ID_PIN) + 1);
-    Serial1.write(response);
 }
 
 /**
@@ -117,9 +80,11 @@ void command_config(char* command)
                 detachInterrupt(digitalPinToInterrupt(oldWindSpeedPin));
         }
 
-        configured = true;
-        started = false;
+        windSpeedCounter = 0;
+        attachInterrupt(digitalPinToInterrupt(windSpeedPin),
+            anemometer_interrupt, RISING);
 
+        configured = true;
         Serial1.write("OK\n");
     }
     else Serial1.write("ERROR\n");
@@ -204,33 +169,12 @@ bool extract_config(char* json)
 }
 
 /**
- * Responds to the START serial command. Adds ISRs and resets counters for
- * interrupt-based sensors. Outputs OK or ERROR.
- */
-void command_start()
-{
-    if (!configured || started)
-    {
-        Serial1.write("ERROR\n");
-        return;
-    }
-
-    if (windSpeedEnabled)
-        attachInterrupt(digitalPinToInterrupt(windSpeedPin), anemometer_interrupt, RISING);
-
-    started = true;
-    windSpeedCounter = 0;
-    
-    Serial1.write("OK\n");
-}
-
-/**
  * Responds to the SAMPLE serial command. Samples the enabled sensors. Outputs
  * a JSON string containing the values, or ERROR.
  */
 void command_sample()
 {
-    if (!started)
+    if (!configured)
     {
         Serial1.write("ERROR\n");
         return;
