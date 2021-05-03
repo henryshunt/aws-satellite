@@ -12,9 +12,12 @@ bool configured = false;
 
 bool windSpeedEnabled;
 int windSpeedPin;
-volatile unsigned int windSpeedCounter = 0;
 bool windDirEnabled;
 int windDirPin;
+bool sunDurEnabled;
+int sunDurPin;
+
+volatile unsigned int windSpeedCounter;
 
 void setup()
 {
@@ -100,7 +103,7 @@ void command_config(char* json)
  */
 bool extract_config(char* json)
 {
-    StaticJsonDocument<JSON_OBJECT_SIZE(4)> jsonDocument;
+    StaticJsonDocument<JSON_OBJECT_SIZE(6)> jsonDocument;
 
     if (deserializeJson(jsonDocument, json) != DeserializationError::Ok)
         return false;
@@ -109,6 +112,8 @@ bool extract_config(char* json)
     int newWindSpeedPin;
     bool newWindDirEnabled = false;
     int newWindDirPin;
+    bool newSunDurEnabled = false;
+    int newSunDurPin;
 
     JsonObject jsonObject = jsonDocument.as<JsonObject>();
 
@@ -161,11 +166,37 @@ bool extract_config(char* json)
     }
     else return false;
 
+    if (jsonObject.containsKey("sunDurEnabled"))
+    {
+        JsonVariant value = jsonObject.getMember("sunDurEnabled");
+
+        if (value.is<bool>())
+        {
+            newSunDurEnabled = value;
+            if (newSunDurEnabled)
+            {
+                if (jsonObject.containsKey("sunDurPin"))
+                {
+                    value = jsonObject.getMember("sunDurPin");
+
+                    if (value.is<int>() && value >= 0)
+                        newSunDurPin = value;
+                    else return false;
+                }
+                else return false;
+            }
+        }
+        else return false;
+    }
+    else return false;
+
 
     windSpeedEnabled = newWindSpeedEnabled;
     windSpeedPin = newWindSpeedPin;
     windDirEnabled = newWindDirEnabled;
     windDirPin = newWindDirPin;
+    sunDurEnabled = newSunDurEnabled;
+    sunDurPin = newSunDurPin;
 
     return true;
 }
@@ -210,8 +241,12 @@ void command_sample()
             windDir = 0;
     }
 
-    char sampleJson[50] = { '\0' };
-    sample_json(sampleJson, windSpeed, windDir);
+    bool sunDur;
+    if (sunDurEnabled)
+        sunDur = digitalRead(sunDurPin) == HIGH;
+
+    char sampleJson[70] = { '\0' };
+    sample_json(sampleJson, windSpeed, windDir, sunDur);
     strcat(sampleJson, "\n");
     Serial1.write(sampleJson);
 }
@@ -222,8 +257,9 @@ void command_sample()
  * @param jsonOut The JSON destination.
  * @param windSpeed The wind speed value.
  * @param windDir The wind direction value.
+ * @param sunDur The sunshine duration value.
  */
-void sample_json(char* jsonOut, int windSpeed, double windDir)
+void sample_json(char* jsonOut, int windSpeed, double windDir, bool sunDur)
 {
     strcat(jsonOut, "{");
     int length = 1;
@@ -249,6 +285,14 @@ void sample_json(char* jsonOut, int windSpeed, double windDir)
         strcat(jsonOut, ",\"windDir\":null");
         length += 15;
     }
+
+    if (sunDurEnabled)
+    {
+        if (sunDur)
+            strcat(jsonOut, ",\"sunDur\":true");
+        else strcat(jsonOut, ",\"sunDur\":false");
+    }
+    else strcat(jsonOut, ",\"sunDur\":null");
 
     strcat(jsonOut, "}");
 }
