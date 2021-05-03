@@ -21,6 +21,9 @@ void setup()
     Serial1.begin(115200);
 }
 
+/**
+ * Receives a serial command and calls the appropriate function to deal with it.
+ */
 void loop()
 {
     bool cmdEnded = false;
@@ -49,7 +52,7 @@ void loop()
         if (!cmdOverflow)
         {
             if (strlen(command) > 7 && strncmp(command, "CONFIG ", 7) == 0)
-                command_config(command);
+                command_config(command + 7);
             else if (strlen(command) == 6 && strcmp(command, "SAMPLE") == 0)
                 command_sample();
             else Serial1.write("ERROR\n");
@@ -63,45 +66,43 @@ void loop()
 }
 
 /**
- * Responds to the CONFIG serial command. Sets which sensors are enabled and
- * configures those sensors. Outputs OK or ERROR.
- * @param command The received CONFIG command. Format is "CONFIG {JSON}".
+ * Responds to the CONFIG serial command. Sets which sensors are enabled and configures those
+ * sensors. Outputs OK or ERROR.
+ * @param json JSON containing the configuration data sent with the command.
  */
-void command_config(char* command)
+void command_config(char* json)
 {
     bool oldWindSpeedEnabled = windSpeedEnabled;
     int oldWindSpeedPin = windSpeedPin;
 
-    if (extract_config(command + 7))
+    if (extract_config(json))
     {
-        // Clear up previous configuration
         if (configured)
         {
             if (oldWindSpeedEnabled)
                 detachInterrupt(digitalPinToInterrupt(oldWindSpeedPin));
         }
+        else configured = true;
 
         windSpeedCounter = 0;
         attachInterrupt(digitalPinToInterrupt(windSpeedPin),
-            anemometer_interrupt, RISING);
+            wind_speed_interrupt, RISING);
 
-        configured = true;
         Serial1.write("OK\n");
     }
     else Serial1.write("ERROR\n");
 }
 
 /**
- * Extracts the configuration values from a JSON string and stores them.
- * @param json JSON string containing configuration values.
+ * Extracts the configuration values from a JSON string and stores them in the global variables.
+ * @param json JSON containing the configuration data.
  * @return An indication of success or failure.
  */
 bool extract_config(char* json)
 {
     StaticJsonDocument<JSON_OBJECT_SIZE(4)> jsonDocument;
-    DeserializationError jsonStatus = deserializeJson(jsonDocument, json);
 
-    if (jsonStatus != DeserializationError::Ok)
+    if (deserializeJson(jsonDocument, json) != DeserializationError::Ok)
         return false;
 
     bool newWindSpeedEnabled = false;
@@ -170,8 +171,8 @@ bool extract_config(char* json)
 }
 
 /**
- * Responds to the SAMPLE serial command. Samples the enabled sensors. Outputs
- * a JSON string containing the values, or ERROR.
+ * Responds to the SAMPLE serial command. Samples the enabled sensors. Outputs a JSON string
+ * containing the values, or ERROR.
  */
 void command_sample()
 {
@@ -184,8 +185,8 @@ void command_sample()
     int windSpeed;
     if (windSpeedEnabled)
     {
-        // Don't calculate the final wind speed. It is up to the user to do that
-        // as it is dependent on how often they decide to sample
+        // Don't calculate the final wind speed. It's up to the user to do that
+        // as it's dependent on how often they decide to sample
         windSpeed = windSpeedCounter;
 
         windSpeedCounter = 0;
@@ -202,7 +203,7 @@ void command_sample()
             adcVoltage = 4.75;
         
         // Convert voltage to degrees. For Inspeed E-Vane II, 5% of input is 0
-        // degrees and 75% is 360
+        // degrees and 75% is 360 degrees
         windDirection = (adcVoltage - 0.25) / (4.75 - 0.25) * 360;
 
         if (windDirection == 360)
@@ -211,12 +212,14 @@ void command_sample()
 
     char sampleJson[50] = { '\0' };
     sample_json(sampleJson, windSpeed, windDirection);
+    strcat(sampleJson, "\n");
     Serial1.write(sampleJson);
 }
 
 /**
- * Generates the JSON for a sample, containing the values for all sensors.
- * @param jsonOut JSON string destination.
+ * Generates the JSON for a sample. The JSON will contain keys for all possible sensors, not just
+ * the currently enabled ones.
+ * @param jsonOut The JSON destination.
  * @param windSpeed The wind speed value.
  * @param windDirection The wind direction value.
  */
@@ -225,38 +228,36 @@ void sample_json(char* jsonOut, int windSpeed, double windDirection)
     strcat(jsonOut, "{");
     int length = 1;
 
-    // Ignore the first sample for wind speed since the counter value is not
-    // considered valid between the CONFIG and first SAMPLE commands
     if (windSpeedEnabled)
         length += sprintf(jsonOut + length, "\"windSpeed\":%d", windSpeed);
     else
     {
-        strcat(jsonOut + length, "\"windSpeed\":null");
+        strcat(jsonOut, "\"windSpeed\":null");
         length += 16;
     }
 
     if (windDirectionEnabled)
     {
         // No default support for formatting floats with sprintf, so do it manually
-        char windDirectionOut[10];
-        dtostrf(windDirection, 4, 2, windDirectionOut);
+        char windDirectionOut[10] = { '\0' };
+        dtostrf(windDirection, 9, 5, windDirectionOut);
 
         length += sprintf(jsonOut + length, ",\"windDirection\":%s", windDirectionOut);
     }
     else
     {
-        strcat(jsonOut + length, ",\"windDirection\":null");
+        strcat(jsonOut, ",\"windDirection\":null");
         length += 21;
     }
 
-    strcat(jsonOut + length, "}\n");
+    strcat(jsonOut, "}");
 }
 
 
 /**
- * ISR for the anemometer. Increments the wind speed counter.
+ * Interrupt service routine for the wind speed sensor. Increments the wind speed counter.
  */
-void anemometer_interrupt()
+void wind_speed_interrupt()
 {
     windSpeedCounter++;
 }
