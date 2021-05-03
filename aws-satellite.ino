@@ -1,9 +1,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
-#define Serial1 Serial
-
-#define MAX_COMMAND_LENGTH 120
+#define MAX_COMMAND_LENGTH 100
 char command[MAX_COMMAND_LENGTH + 1] = { '\0' };
 int cmdPosition = 0;
 bool cmdOverflow = false;
