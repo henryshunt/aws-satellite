@@ -13,8 +13,8 @@ bool configured = false;
 bool windSpeedEnabled;
 int windSpeedPin;
 volatile unsigned int windSpeedCounter = 0;
-bool windDirectionEnabled;
-int windDirectionPin;
+bool windDirEnabled;
+int windDirPin;
 
 void setup()
 {
@@ -107,8 +107,8 @@ bool extract_config(char* json)
 
     bool newWindSpeedEnabled = false;
     int newWindSpeedPin;
-    bool newWindDirectionEnabled = false;
-    int newWindDirectionPin;
+    bool newWindDirEnabled = false;
+    int newWindDirPin;
 
     JsonObject jsonObject = jsonDocument.as<JsonObject>();
 
@@ -137,21 +137,21 @@ bool extract_config(char* json)
     }
     else return false;
 
-    if (jsonObject.containsKey("windDirectionEnabled"))
+    if (jsonObject.containsKey("windDirEnabled"))
     {
-        JsonVariant value = jsonObject.getMember("windDirectionEnabled");
+        JsonVariant value = jsonObject.getMember("windDirEnabled");
 
         if (value.is<bool>())
         {
-            newWindDirectionEnabled = value;
-            if (newWindDirectionEnabled)
+            newWindDirEnabled = value;
+            if (newWindDirEnabled)
             {
-                if (jsonObject.containsKey("windDirectionPin"))
+                if (jsonObject.containsKey("windDirPin"))
                 {
-                    value = jsonObject.getMember("windDirectionPin");
+                    value = jsonObject.getMember("windDirPin");
 
                     if (value.is<int>() && value >= 0)
-                        newWindDirectionPin = value;
+                        newWindDirPin = value;
                     else return false;
                 }
                 else return false;
@@ -164,8 +164,8 @@ bool extract_config(char* json)
 
     windSpeedEnabled = newWindSpeedEnabled;
     windSpeedPin = newWindSpeedPin;
-    windDirectionEnabled = newWindDirectionEnabled;
-    windDirectionPin = newWindDirectionPin;
+    windDirEnabled = newWindDirEnabled;
+    windDirPin = newWindDirPin;
 
     return true;
 }
@@ -192,10 +192,10 @@ void command_sample()
         windSpeedCounter = 0;
     }
 
-    double windDirection;
-    if (windDirectionEnabled)
+    double windDir;
+    if (windDirEnabled)
     {
-        double adcVoltage = analogRead(windDirectionPin) * (5.0 / 1023.0);
+        double adcVoltage = analogRead(windDirPin) * (5.0 / 1023.0);
 
         if (adcVoltage < 0.25)
             adcVoltage = 0.25;
@@ -204,14 +204,14 @@ void command_sample()
         
         // Convert voltage to degrees. For Inspeed E-Vane II, 5% of input is 0
         // degrees and 75% is 360 degrees
-        windDirection = (adcVoltage - 0.25) / (4.75 - 0.25) * 360;
+        windDir = (adcVoltage - 0.25) / (4.75 - 0.25) * 360;
 
-        if (windDirection == 360)
-            windDirection = 0;
+        if (windDir == 360)
+            windDir = 0;
     }
 
     char sampleJson[50] = { '\0' };
-    sample_json(sampleJson, windSpeed, windDirection);
+    sample_json(sampleJson, windSpeed, windDir);
     strcat(sampleJson, "\n");
     Serial1.write(sampleJson);
 }
@@ -221,9 +221,9 @@ void command_sample()
  * the currently enabled ones.
  * @param jsonOut The JSON destination.
  * @param windSpeed The wind speed value.
- * @param windDirection The wind direction value.
+ * @param windDir The wind direction value.
  */
-void sample_json(char* jsonOut, int windSpeed, double windDirection)
+void sample_json(char* jsonOut, int windSpeed, double windDir)
 {
     strcat(jsonOut, "{");
     int length = 1;
@@ -236,18 +236,18 @@ void sample_json(char* jsonOut, int windSpeed, double windDirection)
         length += 16;
     }
 
-    if (windDirectionEnabled)
+    if (windDirEnabled)
     {
         // No default support for formatting floats with sprintf, so do it manually
-        char windDirectionOut[10] = { '\0' };
-        dtostrf(windDirection, 9, 5, windDirectionOut);
+        char windDirOut[10] = { '\0' };
+        dtostrf(windDir, 9, 5, windDirOut);
 
-        length += sprintf(jsonOut + length, ",\"windDirection\":%s", windDirectionOut);
+        length += sprintf(jsonOut + length, ",\"windDir\":%s", windDirOut);
     }
     else
     {
-        strcat(jsonOut, ",\"windDirection\":null");
-        length += 21;
+        strcat(jsonOut, ",\"windDir\":null");
+        length += 15;
     }
 
     strcat(jsonOut, "}");
