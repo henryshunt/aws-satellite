@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
-#define MAX_COMMAND_LENGTH 100
+#define MAX_COMMAND_LENGTH 130
 char command[MAX_COMMAND_LENGTH + 1] = { '\0' };
 int cmdPosition = 0;
 bool cmdOverflow = false;
