@@ -1,14 +1,20 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
+#define Serial1 Serial
+
+#define MAX_COMMAND_LENGTH 120
+char command[MAX_COMMAND_LENGTH + 1] = { '\0' };
+int cmdPosition = 0;
+bool cmdOverflow = false;
+
 bool configured = false;
 
 bool windSpeedEnabled;
 int windSpeedPin;
+volatile unsigned int windSpeedCounter = 0;
 bool windDirectionEnabled;
 int windDirectionPin;
-
-volatile unsigned int windSpeedCounter;
 
 void setup()
 {
@@ -17,42 +23,43 @@ void setup()
 
 void loop()
 {
-    char command[120] = { '\0' };
-    int commandPosition = 0;
-    bool commandEnded = false;
-    bool commandOverflow = false;
+    bool cmdEnded = false;
 
-    while (!commandEnded)
+    if (Serial1.available())
     {
-        if (Serial1.available())
+        char newChar = Serial1.read();
+
+        if (newChar != '\n')
         {
-            char newChar = Serial1.read();
-
-            if (newChar != '\n')
-            {
-                if (commandPosition == 120)
-                {
-                    commandOverflow = true;
-                    continue;
-                }
-
-                command[commandPosition++] = newChar;
-            }
-            else commandEnded = true;
+            if (cmdPosition < MAX_COMMAND_LENGTH)
+                command[cmdPosition++] = newChar;
+            else cmdOverflow = true;
+        }
+        else
+        {
+            command[cmdPosition] = '\0';
+            cmdEnded = true;
         }
     }
 
-    if (commandOverflow)
+    if (cmdEnded)
     {
-        Serial1.write("ERROR\n");
-        return;
-    }
+        cmdPosition = 0;
 
-    if (strncmp(command, "CONFIG", 6) == 0)
-        command_config(command);
-    else if (strncmp(command, "SAMPLE", 6) == 0)
-        command_sample();
-    else Serial1.write("ERROR\n");
+        if (!cmdOverflow)
+        {
+            if (strlen(command) > 7 && strncmp(command, "CONFIG ", 7) == 0)
+                command_config(command);
+            else if (strlen(command) == 6 && strcmp(command, "SAMPLE") == 0)
+                command_sample();
+            else Serial1.write("ERROR\n");
+        }
+        else
+        {
+            Serial1.write("ERROR\n");
+            cmdOverflow = false;
+        }
+    }
 }
 
 /**
@@ -62,12 +69,6 @@ void loop()
  */
 void command_config(char* command)
 {
-    if (strnlen(command, 8) < 8)
-    {
-        Serial1.write("ERROR\n");
-        return;
-    }
-
     bool oldWindSpeedEnabled = windSpeedEnabled;
     int oldWindSpeedPin = windSpeedPin;
 
