@@ -83,7 +83,10 @@ void command_config(const char* const json)
     cfg newConfig;
 
     if (!extract_config(json, &newConfig))
+    {
         Serial1.write("ERROR\n");
+        return false;
+    }
     
     if (configured)
     {
@@ -114,7 +117,10 @@ bool extract_config(const char* const json, cfg* const configOut)
 {
     StaticJsonDocument<JSON_OBJECT_SIZE(6)> jsonDocument;
 
-    if (deserializeJson(jsonDocument, json) != DeserializationError::Ok)
+    DeserializationError deserError =
+        deserializeJson(jsonDocument, (char* const)json);
+    
+    if (deserError != DeserializationError::Ok)
         return false;
 
     const JsonObject jsonObject = jsonDocument.as<JsonObject>();
