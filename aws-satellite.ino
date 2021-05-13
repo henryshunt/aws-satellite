@@ -38,7 +38,7 @@ void loop()
 
     if (Serial1.available())
     {
-        char newChar = Serial1.read();
+        const char newChar = Serial1.read();
 
         if (newChar != '\n')
         {
@@ -78,11 +78,11 @@ void loop()
  * Outputs OK or ERROR.
  * @param json A JSON string containing the configuration data sent with the command.
  */
-void command_config(char* json)
+void command_config(const char* const json)
 {
-    cfg* newConfig;
+    cfg newConfig;
 
-    if (!extract_config(json, newConfig))
+    if (!extract_config(json, &newConfig))
         Serial1.write("ERROR\n");
     
     if (configured)
@@ -91,7 +91,7 @@ void command_config(char* json)
             detachInterrupt(digitalPinToInterrupt(config.windSpeedPin));
     }
     
-    config = *newConfig;
+    config = newConfig;
     configured = true;
 
     if (config.windSpeedEnabled)
@@ -110,14 +110,14 @@ void command_config(char* json)
  * @param configOut The configuration destination.
  * @return An indication of success or failure.
  */
-bool extract_config(char* json, cfg* configOut)
+bool extract_config(const char* const json, cfg* const configOut)
 {
     StaticJsonDocument<JSON_OBJECT_SIZE(6)> jsonDocument;
 
     if (deserializeJson(jsonDocument, json) != DeserializationError::Ok)
         return false;
 
-    JsonObject jsonObject = jsonDocument.as<JsonObject>();
+    const JsonObject jsonObject = jsonDocument.as<JsonObject>();
 
     if (jsonObject.containsKey("windSpeed") &&
         jsonObject.getMember("windSpeed").is<bool>())
@@ -128,7 +128,7 @@ bool extract_config(char* json, cfg* configOut)
         {
             if (jsonObject.containsKey("windSpeedPin"))
             {
-                JsonVariant value = jsonObject.getMember("windSpeedPin");
+                const JsonVariant value = jsonObject.getMember("windSpeedPin");
 
                 if (value.is<int>() && value >= 0)
                     configOut->windSpeedPin = value;
@@ -148,7 +148,7 @@ bool extract_config(char* json, cfg* configOut)
         {
             if (jsonObject.containsKey("windDirPin"))
             {
-                JsonVariant value = jsonObject.getMember("windDirPin");
+                const JsonVariant value = jsonObject.getMember("windDirPin");
 
                 if (value.is<int>() && value >= 0)
                     configOut->windDirPin = value;
@@ -168,7 +168,7 @@ bool extract_config(char* json, cfg* configOut)
         {
             if (jsonObject.containsKey("sunDurPin"))
             {
-                JsonVariant value = jsonObject.getMember("sunDurPin");
+                const JsonVariant value = jsonObject.getMember("sunDurPin");
 
                 if (value.is<int>() && value >= 0)
                     configOut->sunDurPin = value;
@@ -240,7 +240,7 @@ void command_sample()
  * @param windDir The wind direction value.
  * @param sunDur The sunshine duration value.
  */
-void sample_json(char* jsonOut, int windSpeed, double windDir, bool sunDur)
+void sample_json(char* const jsonOut, int windSpeed, double windDir, bool sunDur)
 {
     strcat(jsonOut, "{");
     int length = 1;
@@ -256,7 +256,7 @@ void sample_json(char* jsonOut, int windSpeed, double windDir, bool sunDur)
     if (config.windDirEnabled)
     {
         // No default support for formatting floats with sprintf, so do it manually
-        char windDirOut[10] = { '\0' };
+        const char windDirOut[10] = { '\0' };
         dtostrf(windDir, 9, 5, windDirOut);
 
         length += sprintf(jsonOut + length, ",\"windDir\":%s", windDirOut);
