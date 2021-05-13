@@ -6,14 +6,21 @@ char command[MAX_COMMAND_LENGTH + 1] = { '\0' };
 int cmdPosition = 0;
 bool cmdOverflow = false;
 
-bool configured = false;
+/**
+ * Represents configuration data for the satellite device.
+ */
+struct cfg
+{
+    bool windSpeedEnabled;
+    int windSpeedPin;
+    bool windDirEnabled;
+    int windDirPin;
+    bool sunDurEnabled;
+    int sunDurPin;
+};
 
-bool windSpeedEnabled;
-int windSpeedPin;
-bool windDirEnabled;
-int windDirPin;
-bool sunDurEnabled;
-int sunDurPin;
+bool configured = false;
+cfg config;
 
 volatile unsigned int windSpeedCounter;
 
@@ -67,140 +74,116 @@ void loop()
 }
 
 /**
- * Responds to the CONFIG serial command. Sets which sensors are enabled and configures those
- * sensors. Outputs OK or ERROR.
- * @param json JSON containing the configuration data sent with the command.
+ * Responds to the CONFIG serial command. Loads the configuration and configures the sensors.
+ * Outputs OK or ERROR.
+ * @param json A JSON string containing the configuration data sent with the command.
  */
 void command_config(char* json)
 {
-    bool oldWindSpeedEnabled = windSpeedEnabled;
-    int oldWindSpeedPin = windSpeedPin;
+    cfg* newConfig;
 
-    if (extract_config(json))
+    if (!extract_config(json, newConfig))
+        Serial1.write("ERROR\n");
+    
+    if (configured)
     {
-        if (configured)
-        {
-            if (oldWindSpeedEnabled)
-                detachInterrupt(digitalPinToInterrupt(oldWindSpeedPin));
-        }
-        else configured = true;
-
-        windSpeedCounter = 0;
-        attachInterrupt(digitalPinToInterrupt(windSpeedPin),
-            wind_speed_interrupt, RISING);
-
-        Serial1.write("OK\n");
+        if (config.windSpeedEnabled)
+            detachInterrupt(digitalPinToInterrupt(config.windSpeedPin));
     }
-    else Serial1.write("ERROR\n");
+    
+    config = *newConfig;
+    configured = true;
+
+    if (config.windSpeedEnabled)
+    {
+        windSpeedCounter = 0;
+        attachInterrupt(digitalPinToInterrupt(config.windSpeedPin),
+            wind_speed_interrupt, RISING);
+    }
+
+    Serial1.write("OK\n");
 }
 
 /**
- * Extracts the configuration values from a JSON string and stores them in the global variables.
- * @param json JSON containing the configuration data.
+ * Extracts the configuration values from a JSON string and puts them in a cfg struct.
+ * @param json The JSON string containing the configuration data.
+ * @param configOut The configuration destination.
  * @return An indication of success or failure.
  */
-bool extract_config(char* json)
+bool extract_config(char* json, cfg* configOut)
 {
     StaticJsonDocument<JSON_OBJECT_SIZE(6)> jsonDocument;
 
     if (deserializeJson(jsonDocument, json) != DeserializationError::Ok)
         return false;
 
-    bool newWindSpeedEnabled = false;
-    int newWindSpeedPin;
-    bool newWindDirEnabled = false;
-    int newWindDirPin;
-    bool newSunDurEnabled = false;
-    int newSunDurPin;
-
     JsonObject jsonObject = jsonDocument.as<JsonObject>();
 
-
-    if (jsonObject.containsKey("windSpeedEnabled"))
+    if (jsonObject.containsKey("windSpeedEnabled") &&
+        jsonObject.getMember("windSpeedEnabled").is<bool>())
     {
-        JsonVariant value = jsonObject.getMember("windSpeedEnabled");
+        configOut->windSpeedEnabled = jsonObject.getMember("windSpeedEnabled");
 
-        if (value.is<bool>())
+        if (configOut->windSpeedEnabled)
         {
-            newWindSpeedEnabled = value;
-            if (newWindSpeedEnabled)
+            if (jsonObject.containsKey("windSpeedPin"))
             {
-                if (jsonObject.containsKey("windSpeedPin"))
-                {
-                    value = jsonObject.getMember("windSpeedPin");
+                JsonVariant value = jsonObject.getMember("windSpeedPin");
 
-                    if (value.is<int>() && value >= 0)
-                        newWindSpeedPin = value;
-                    else return false;
-                }
+                if (value.is<int>() && value >= 0)
+                    configOut->windSpeedPin = value;
                 else return false;
             }
+            else return false;
         }
-        else return false;
     }
     else return false;
 
-    if (jsonObject.containsKey("windDirEnabled"))
+    if (jsonObject.containsKey("windDirEnabled") &&
+        jsonObject.getMember("windDirEnabled").is<bool>())
     {
-        JsonVariant value = jsonObject.getMember("windDirEnabled");
+        configOut->windDirEnabled = jsonObject.getMember("windDirEnabled");
 
-        if (value.is<bool>())
+        if (configOut->windDirEnabled)
         {
-            newWindDirEnabled = value;
-            if (newWindDirEnabled)
+            if (jsonObject.containsKey("windDirPin"))
             {
-                if (jsonObject.containsKey("windDirPin"))
-                {
-                    value = jsonObject.getMember("windDirPin");
+                JsonVariant value = jsonObject.getMember("windDirPin");
 
-                    if (value.is<int>() && value >= 0)
-                        newWindDirPin = value;
-                    else return false;
-                }
+                if (value.is<int>() && value >= 0)
+                    configOut->windDirPin = value;
                 else return false;
             }
+            else return false;
         }
-        else return false;
     }
     else return false;
 
-    if (jsonObject.containsKey("sunDurEnabled"))
+    if (jsonObject.containsKey("sunDurEnabled") &&
+        jsonObject.getMember("sunDurEnabled").is<bool>())
     {
-        JsonVariant value = jsonObject.getMember("sunDurEnabled");
+        configOut->sunDurEnabled = jsonObject.getMember("sunDurEnabled");
 
-        if (value.is<bool>())
+        if (configOut->sunDurEnabled)
         {
-            newSunDurEnabled = value;
-            if (newSunDurEnabled)
+            if (jsonObject.containsKey("sunDurPin"))
             {
-                if (jsonObject.containsKey("sunDurPin"))
-                {
-                    value = jsonObject.getMember("sunDurPin");
+                JsonVariant value = jsonObject.getMember("sunDurPin");
 
-                    if (value.is<int>() && value >= 0)
-                        newSunDurPin = value;
-                    else return false;
-                }
+                if (value.is<int>() && value >= 0)
+                    configOut->sunDurPin = value;
                 else return false;
             }
+            else return false;
         }
-        else return false;
     }
     else return false;
-
-
-    windSpeedEnabled = newWindSpeedEnabled;
-    windSpeedPin = newWindSpeedPin;
-    windDirEnabled = newWindDirEnabled;
-    windDirPin = newWindDirPin;
-    sunDurEnabled = newSunDurEnabled;
-    sunDurPin = newSunDurPin;
 
     return true;
 }
 
 /**
- * Responds to the SAMPLE serial command. Samples the enabled sensors. Outputs a JSON string
+ * Responds to the SAMPLE serial command. Samples the enabled sensors and outputs a JSON string
  * containing the values, or ERROR.
  */
 void command_sample()
@@ -212,7 +195,7 @@ void command_sample()
     }
 
     int windSpeed;
-    if (windSpeedEnabled)
+    if (config.windSpeedEnabled)
     {
         // Don't calculate the final wind speed. It's up to the user to do that
         // as it's dependent on how often they decide to sample
@@ -222,9 +205,9 @@ void command_sample()
     }
 
     double windDir;
-    if (windDirEnabled)
+    if (config.windDirEnabled)
     {
-        double adcVoltage = analogRead(windDirPin) * (5.0 / 1023.0);
+        double adcVoltage = analogRead(config.windDirPin) * (5.0 / 1023.0);
 
         if (adcVoltage < 0.25)
             adcVoltage = 0.25;
@@ -240,8 +223,8 @@ void command_sample()
     }
 
     bool sunDur;
-    if (sunDurEnabled)
-        sunDur = digitalRead(sunDurPin) == HIGH;
+    if (config.sunDurEnabled)
+        sunDur = digitalRead(config.sunDurPin) == HIGH;
 
     char sampleJson[70] = { '\0' };
     sample_json(sampleJson, windSpeed, windDir, sunDur);
@@ -250,9 +233,9 @@ void command_sample()
 }
 
 /**
- * Generates the JSON for a sample. The JSON will contain keys for all possible sensors, not just
- * the currently enabled ones.
- * @param jsonOut The JSON destination.
+ * Generates the JSON string for a sample. The JSON will contain keys for all possible sensors, not
+ * just the currently enabled ones.
+ * @param jsonOut The JSON string destination.
  * @param windSpeed The wind speed value.
  * @param windDir The wind direction value.
  * @param sunDur The sunshine duration value.
@@ -262,7 +245,7 @@ void sample_json(char* jsonOut, int windSpeed, double windDir, bool sunDur)
     strcat(jsonOut, "{");
     int length = 1;
 
-    if (windSpeedEnabled)
+    if (config.windSpeedEnabled)
         length += sprintf(jsonOut + length, "\"windSpeed\":%d", windSpeed);
     else
     {
@@ -270,7 +253,7 @@ void sample_json(char* jsonOut, int windSpeed, double windDir, bool sunDur)
         length += 16;
     }
 
-    if (windDirEnabled)
+    if (config.windDirEnabled)
     {
         // No default support for formatting floats with sprintf, so do it manually
         char windDirOut[10] = { '\0' };
@@ -284,7 +267,7 @@ void sample_json(char* jsonOut, int windSpeed, double windDir, bool sunDur)
         length += 15;
     }
 
-    if (sunDurEnabled)
+    if (config.sunDurEnabled)
     {
         if (sunDur)
             strcat(jsonOut, ",\"sunDur\":true");
