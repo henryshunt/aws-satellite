@@ -119,10 +119,10 @@ bool extract_config(char* json, cfg* configOut)
 
     JsonObject jsonObject = jsonDocument.as<JsonObject>();
 
-    if (jsonObject.containsKey("windSpeedEnabled") &&
-        jsonObject.getMember("windSpeedEnabled").is<bool>())
+    if (jsonObject.containsKey("windSpeed") &&
+        jsonObject.getMember("windSpeed").is<bool>())
     {
-        configOut->windSpeedEnabled = jsonObject.getMember("windSpeedEnabled");
+        configOut->windSpeedEnabled = jsonObject.getMember("windSpeed");
 
         if (configOut->windSpeedEnabled)
         {
@@ -139,10 +139,10 @@ bool extract_config(char* json, cfg* configOut)
     }
     else return false;
 
-    if (jsonObject.containsKey("windDirEnabled") &&
-        jsonObject.getMember("windDirEnabled").is<bool>())
+    if (jsonObject.containsKey("windDir") &&
+        jsonObject.getMember("windDir").is<bool>())
     {
-        configOut->windDirEnabled = jsonObject.getMember("windDirEnabled");
+        configOut->windDirEnabled = jsonObject.getMember("windDir");
 
         if (configOut->windDirEnabled)
         {
@@ -159,10 +159,10 @@ bool extract_config(char* json, cfg* configOut)
     }
     else return false;
 
-    if (jsonObject.containsKey("sunDurEnabled") &&
-        jsonObject.getMember("sunDurEnabled").is<bool>())
+    if (jsonObject.containsKey("sunDur") &&
+        jsonObject.getMember("sunDur").is<bool>())
     {
-        configOut->sunDurEnabled = jsonObject.getMember("sunDurEnabled");
+        configOut->sunDurEnabled = jsonObject.getMember("sunDur");
 
         if (configOut->sunDurEnabled)
         {
